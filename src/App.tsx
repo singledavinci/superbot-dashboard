@@ -142,8 +142,8 @@ function App() {
         ) : (
           <>
             {activeTab === 'overview' && <OverviewPage rules={rules} wallets={wallets} collections={collections} />}
-            {activeTab === 'wallets' && <WalletsPage wallets={wallets} setWallets={setWallets} guildId={GUILD_ID} />}
-            {activeTab === 'collections' && <CollectionsPage collections={collections} setCollections={setCollections} guildId={GUILD_ID} />}
+            {activeTab === 'wallets' && GUILD_ID && <WalletsPage wallets={wallets} setWallets={setWallets} guildId={GUILD_ID} />}
+            {activeTab === 'collections' && GUILD_ID && <CollectionsPage collections={collections} setCollections={setCollections} guildId={GUILD_ID} />}
             {activeTab === 'alerts' && <AlertsPage rules={rules} />}
             {activeTab === 'settings' && <SettingsPage />}
           </>
