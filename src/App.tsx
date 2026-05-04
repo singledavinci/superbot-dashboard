@@ -150,13 +150,6 @@ function App() {
         )}
       </main>
       
-      <style>{`
-        @media (max-width: 1024px) {
-          .mobile-header-spacer { display: block !important; }
-          .header-desc { display: none; }
-          .main-content { padding-top: 20px !important; }
-        }
-      `}</style>
     </div>
   );
 }
