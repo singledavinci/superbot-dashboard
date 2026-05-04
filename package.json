@@ -6,8 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "start": "serve -s dist -p $PORT",
     "lint": "eslint .",
     "preview": "vite preview"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@emnapi/core": "1.10.0",
