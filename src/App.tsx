@@ -9,8 +9,7 @@ import CollectionsPage from './components/CollectionsPage';
 import AlertsPage from './components/AlertsPage';
 import SettingsPage from './components/SettingsPage';
 
-// Demo guild ID — replace with real guild from OAuth session
-const GUILD_ID = 'MOCK_GUILD_ID';
+
 
 // Sidebar Item Component
 const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label: string, active?: boolean, onClick: () => void }) => (
@@ -38,20 +37,34 @@ function App() {
 
     const tokenFromStorage = localStorage.getItem('superbot_token');
     if (tokenFromStorage) {
-      const loadData = async () => {
+      const loadData = async (currentGuildId?: string) => {
         setIsLoading(true);
         try {
           const headers = { Authorization: `Bearer ${tokenFromStorage}` };
-          const [rRes, wRes, cRes] = await Promise.all([
-            fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${GUILD_ID}/rules`, { headers }),
-            fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${GUILD_ID}/wallets`, { headers }),
-            fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${GUILD_ID}/collections`, { headers })
-          ]);
           
-          const [rData, wData, cData] = await Promise.all([rRes.json(), wRes.json(), cRes.json()]);
-          setRules(rData.rules || []);
-          setWallets(wData.wallets || []);
-          setCollections(cData.collections || []);
+          // If no guildId yet, fetch session first
+          let finalGuildId = currentGuildId || guildId;
+          if (!finalGuildId) {
+            const meRes = await fetch(`https://superbot-backend-production.up.railway.app/api/v1/auth/me`, { headers });
+            const meData = await meRes.json();
+            if (meData.guildId) {
+              finalGuildId = meData.guildId;
+              setGuildId(finalGuildId);
+            }
+          }
+
+          if (finalGuildId) {
+            const [rRes, wRes, cRes] = await Promise.all([
+              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/rules`, { headers }),
+              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/wallets`, { headers }),
+              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/collections`, { headers })
+            ]);
+            
+            const [rData, wData, cData] = await Promise.all([rRes.json(), wRes.json(), cRes.json()]);
+            setRules(rData.rules || []);
+            setWallets(wData.wallets || []);
+            setCollections(cData.collections || []);
+          }
         } catch (e) {
           console.error('Data load failed', e);
         }
@@ -61,9 +74,9 @@ function App() {
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [guildId]);
 
-  const isAuth = !!localStorage.getItem('superbot_token');
+  const isAuth = !!token;
 
   const PAGE_TITLE: Record<string, string> = {
     overview: 'System Overview',
