@@ -26,6 +26,9 @@ function App() {
   const [collections, setCollections] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [guildId, setGuildId] = useState<string | null>(null);
+  const token = localStorage.getItem('superbot_token');
+  const GUILD_ID = guildId;
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
