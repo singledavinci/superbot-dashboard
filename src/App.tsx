@@ -20,6 +20,11 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label:
 );
 
 function App() {
+  // DEBUG: Log immediately to verify code is running
+  console.log('='.repeat(50));
+  console.log('[APP] *** SUPERBOT DASHBOARD LOADED ***');
+  console.log('='.repeat(50));
+
   const [activeTab, setActiveTab] = useState('overview');
   const [rules, setRules] = useState<any[]>([]);
   const [wallets, setWallets] = useState<any[]>([]);
@@ -90,6 +95,16 @@ function App() {
   };
 
   const closeSidebar = () => setSidebarOpen(false);
+
+  // Expose app state to window for debugging
+  (window as any).__SUPERBOT_DEBUG__ = {
+    token: token,
+    guildId: guildId,
+    wallets: wallets,
+    collections: collections,
+    isLoading: isLoading,
+    isAuth: isAuth,
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', position: 'relative' }}>
