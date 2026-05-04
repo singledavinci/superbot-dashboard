@@ -19,7 +19,13 @@ const WalletsPage = ({ wallets, setWallets, guildId }: { wallets: any[], setWall
       await addWallet(guildId, form.address, form.label, form.channelId || undefined);
       setWallets((prev: any) => [...prev, { address: form.address, label: form.label || form.address.slice(0, 8), chain: 'ETH' }]);
       setForm({ address: '', label: '', channelId: '' }); setShowModal(false);
-    } catch { setError('API error'); }
+    } catch (err: any) { 
+      if (err.response?.status === 401) {
+        setError('Please login to manage wallets');
+      } else {
+        setError('API error - check login status');
+      }
+    }
     setSaving(false);
   };
 
