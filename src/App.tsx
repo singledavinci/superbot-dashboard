@@ -423,7 +423,7 @@ function App() {
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40, marginTop: 'calc(var(--mobile-margin, 0px))' }}>
           <div>
             <h1 style={{ fontSize: 'clamp(1.25rem, 5vw, 1.75rem)', marginBottom: 4 }}>{PAGE_TITLE[activeTab]}</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }} className="header-desc">Real-time NFT intelligence.</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }} className="header-desc">Real-time NFT intelligence. <span style={{ color: 'var(--accent-purple)', marginLeft: 8, opacity: 0.5 }}>v2.0-LIVE</span></p>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }} className="header-actions">
             {isAuth ? (
