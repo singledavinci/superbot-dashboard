@@ -31,50 +31,97 @@ function App() {
   const GUILD_ID = guildId;
 
   useEffect(() => {
+    console.log('[APP] Component mounted');
+    
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    if (token) {
-      localStorage.setItem('superbot_token', token);
+    const tokenFromUrl = urlParams.get('token');
+    console.log('[APP] Token from URL:', tokenFromUrl ? 'YES' : 'NO');
+    
+    if (tokenFromUrl) {
+      console.log('[APP] Saving token to localStorage');
+      localStorage.setItem('superbot_token', tokenFromUrl);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     const tokenFromStorage = localStorage.getItem('superbot_token');
+    console.log('[APP] Token in localStorage:', tokenFromStorage ? 'YES' : 'NO');
+    
     if (tokenFromStorage) {
-      const loadData = async (currentGuildId?: string) => {
+      console.log('[APP] Starting data load...');
+      const loadData = async () => {
         setIsLoading(true);
         try {
           const headers = { Authorization: `Bearer ${tokenFromStorage}` };
           
-          // If no guildId yet, fetch session first
-          let finalGuildId = currentGuildId || guildId;
-          if (!finalGuildId) {
-            const meRes = await fetch(`https://superbot-backend-production.up.railway.app/api/v1/auth/me`, { headers });
-            const meData = await meRes.json();
-            if (meData.guildId) {
-              finalGuildId = meData.guildId;
-              setGuildId(finalGuildId);
-            }
+          console.log('[API] Fetching /auth/me...');
+          const meRes = await fetch(`https://superbot-backend-production.up.railway.app/api/v1/auth/me`, { headers });
+          console.log('[API] /auth/me status:', meRes.status);
+          
+          if (!meRes.ok) {
+            console.error('[ERROR] /auth/me failed:', meRes.status, meRes.statusText);
+            setIsLoading(false);
+            return;
           }
-
-          if (finalGuildId) {
-            const [rRes, wRes, cRes] = await Promise.all([
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/rules`, { headers }),
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/wallets`, { headers }),
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/collections`, { headers })
-            ]);
-            
-            const [rData, wData, cData] = await Promise.all([rRes.json(), wRes.json(), cRes.json()]);
-            setRules(rData.rules || []);
-            setWallets(wData.wallets || []);
-            setCollections(cData.collections || []);
+          
+          const meData = await meRes.json();
+          console.log('[API] /auth/me response:', meData);
+          
+          if (!meData.guildId) {
+            console.error('[ERROR] No guildId in response');
+            setIsLoading(false);
+            return;
           }
+          
+          const finalGuildId = meData.guildId;
+          console.log('[API] Got guildId:', finalGuildId);
+          setGuildId(finalGuildId);
+          
+          console.log('[API] Fetching rules, wallets, collections...');
+          const [rRes, wRes, cRes] = await Promise.all([
+            fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/rules`, { headers }),
+            fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/wallets`, { headers }),
+            fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/collections`, { headers })
+          ]);
+          
+          console.log('[API] Response statuses:', {
+            rules: rRes.status,
+            wallets: wRes.status,
+            collections: cRes.status
+          });
+          
+          const [rData, wData, cData] = await Promise.all([
+            rRes.json(),
+            wRes.json(),
+            cRes.json()
+          ]);
+          
+          console.log('[API] Raw responses:', { rData, wData, cData });
+          
+          // Handle both wrapped and unwrapped responses
+          const rulesData = Array.isArray(rData) ? rData : (rData.rules || []);
+          const walletsData = Array.isArray(wData) ? wData : (wData.wallets || []);
+          const collectionsData = Array.isArray(cData) ? cData : (cData.collections || []);
+          
+          console.log('[APP] Processed data:', {
+            rules: rulesData.length,
+            wallets: walletsData.length,
+            collections: collectionsData.length
+          });
+          
+          setRules(rulesData);
+          setWallets(walletsData);
+          setCollections(collectionsData);
+          
+          console.log('[APP] Data loaded successfully');
         } catch (e) {
-          console.error('Data load failed', e);
+          console.error('[ERROR] Data load failed:', e);
         }
         setIsLoading(false);
       };
+      
       loadData();
     } else {
+      console.log('[APP] No token found - user needs to login');
       setIsLoading(false);
     }
   }, []);
@@ -150,13 +197,6 @@ function App() {
         )}
       </main>
       
-      <style>{`
-        @media (max-width: 1024px) {
-          .mobile-header-spacer { display: block !important; }
-          .header-desc { display: none; }
-          .main-content { padding-top: 20px !important; }
-        }
-      `}</style>
     </div>
   );
 }
