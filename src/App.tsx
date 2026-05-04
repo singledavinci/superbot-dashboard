@@ -48,28 +48,61 @@ function App() {
           // If no guildId yet, fetch session first
           let finalGuildId = currentGuildId || guildId;
           if (!finalGuildId) {
+            console.log('[DEBUG] Fetching auth/me to get guildId...');
             const meRes = await fetch(`https://superbot-backend-production.up.railway.app/api/v1/auth/me`, { headers });
+            if (!meRes.ok) {
+              console.error('[ERROR] auth/me failed:', meRes.status, meRes.statusText);
+              throw new Error(`Auth failed: ${meRes.status}`);
+            }
             const meData = await meRes.json();
+            console.log('[DEBUG] auth/me response:', meData);
             if (meData.guildId) {
               finalGuildId = meData.guildId;
+              console.log('[DEBUG] Got guildId:', finalGuildId);
               setGuildId(finalGuildId);
+            } else {
+              console.warn('[WARN] No guildId in auth response');
             }
           }
 
           if (finalGuildId) {
+            console.log('[DEBUG] Fetching data for guildId:', finalGuildId);
             const [rRes, wRes, cRes] = await Promise.all([
               fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/rules`, { headers }),
               fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/wallets`, { headers }),
               fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/collections`, { headers })
             ]);
+
+            if (!rRes.ok || !wRes.ok || !cRes.ok) {
+              console.error('[ERROR] API responses not OK:', {
+                rules: rRes.status,
+                wallets: wRes.status,
+                collections: cRes.status
+              });
+            }
             
             const [rData, wData, cData] = await Promise.all([rRes.json(), wRes.json(), cRes.json()]);
-            setRules(rData.rules || []);
-            setWallets(wData.wallets || []);
-            setCollections(cData.collections || []);
+
+            console.log('[DEBUG] API responses:', { rData, wData, cData });
+
+            const rulesData = rData.rules || rData || [];
+            const walletsData = wData.wallets || wData || [];
+            const collectionsData = cData.collections || cData || [];
+
+            console.log('[DEBUG] Setting state with:', {
+              rules: rulesData.length,
+              wallets: walletsData.length,
+              collections: collectionsData.length
+            });
+
+            setRules(rulesData);
+            setWallets(walletsData);
+            setCollections(collectionsData);
+          } else {
+            console.warn('[WARN] No finalGuildId available');
           }
         } catch (e) {
-          console.error('Data load failed', e);
+          console.error('[ERROR] Data load failed:', e);
         }
         setIsLoading(false);
       };
