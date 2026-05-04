@@ -77,7 +77,7 @@ function App() {
     } else {
       setIsLoading(false);
     }
-  }, [guildId]);
+  }, []);
 
   const isAuth = !!token;
 
