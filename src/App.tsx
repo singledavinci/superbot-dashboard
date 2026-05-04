@@ -130,7 +130,11 @@ function App() {
             {isAuth ? (
               <span style={{ color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>✓ Authenticated</span>
             ) : (
-              <button className="cyber-btn primary" onClick={() => (window.location.href = 'https://superbot-backend-production.up.railway.app/api/v1/auth/discord')}>
+              <button className="cyber-btn primary" onClick={() => {
+                  const redirectUri = `${window.location.origin}/`;
+                  const authUrl = `https://superbot-backend-production.up.railway.app/api/v1/auth/discord?redirect_uri=${encodeURIComponent(redirectUri)}`;
+                  window.location.href = authUrl;
+                }}>
                 Login
               </button>
             )}
