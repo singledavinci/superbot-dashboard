@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "start": "serve -s dist -l $PORT",
+    "start": "node server.cjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -19,7 +19,7 @@
     "lucide-react": "^1.14.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "serve": "^14.2.6"
+    "express": "^4.21.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
