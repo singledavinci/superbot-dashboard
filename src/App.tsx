@@ -27,40 +27,43 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [guildId, setGuildId] = useState<string | null>(null);
-  const token = localStorage.getItem('superbot_token');
-  const GUILD_ID = guildId;
+  const [token, setToken] = useState<string | null>(localStorage.getItem('superbot_token'));
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    if (token) {
-      localStorage.setItem('superbot_token', token);
+    const tokenFromUrl = urlParams.get('token');
+    
+    if (tokenFromUrl) {
+      localStorage.setItem('superbot_token', tokenFromUrl);
+      setToken(tokenFromUrl);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-    const tokenFromStorage = localStorage.getItem('superbot_token');
-    if (tokenFromStorage) {
-      const loadData = async (currentGuildId?: string) => {
+    const currentToken = tokenFromUrl || localStorage.getItem('superbot_token');
+    
+    if (currentToken) {
+      const loadData = async () => {
         setIsLoading(true);
         try {
-          const headers = { Authorization: `Bearer ${tokenFromStorage}` };
+          const headers = { Authorization: `Bearer ${currentToken}` };
           
-          // If no guildId yet, fetch session first
-          let finalGuildId = currentGuildId || guildId;
-          if (!finalGuildId) {
-            const meRes = await fetch(`https://superbot-backend-production.up.railway.app/api/v1/auth/me`, { headers });
-            const meData = await meRes.json();
-            if (meData.guildId) {
-              finalGuildId = meData.guildId;
-              setGuildId(finalGuildId);
-            }
+          // Always refresh session info to get latest guildId
+          const meRes = await fetch(`https://superbot-backend-production.up.railway.app/api/v1/auth/me`, { headers });
+          if (meRes.status === 401) {
+            localStorage.removeItem('superbot_token');
+            setToken(null);
+            setIsLoading(false);
+            return;
           }
 
-          if (finalGuildId) {
+          const meData = await meRes.json();
+          if (meData.guildId) {
+            setGuildId(meData.guildId);
+            
             const [rRes, wRes, cRes] = await Promise.all([
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/rules`, { headers }),
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/wallets`, { headers }),
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${finalGuildId}/collections`, { headers })
+              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${meData.guildId}/rules`, { headers }),
+              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${meData.guildId}/wallets`, { headers }),
+              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${meData.guildId}/collections`, { headers })
             ]);
             
             const [rData, wData, cData] = await Promise.all([rRes.json(), wRes.json(), cRes.json()]);
@@ -77,9 +80,10 @@ function App() {
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [token]);
 
   const isAuth = !!token;
+  const GUILD_ID = guildId;
 
   const PAGE_TITLE: Record<string, string> = {
     overview: 'System Overview',
