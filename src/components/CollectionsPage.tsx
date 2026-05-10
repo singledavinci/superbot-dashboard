@@ -1,9 +1,18 @@
 import { useState } from 'react';
-import { Layers, BellRing, Zap, Shield, Plus, X, Trash2 } from 'lucide-react';
+import { Layers, BellRing, Zap, Plus, X, Trash2 } from 'lucide-react';
 import { StatCard, SectionHeader, Badge } from './Shared';
 import { addCollection, deleteCollection } from '../api';
+import type { Collection } from '../types';
 
-const CollectionsPage = ({ collections, setCollections, guildId }: { collections: any[], setCollections: any, guildId: string }) => {
+const CollectionsPage = ({
+  collections,
+  setCollections,
+  guildId,
+}: {
+  collections: Collection[];
+  setCollections: React.Dispatch<React.SetStateAction<Collection[]>>;
+  guildId: string;
+}) => {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ contract: '', name: '', floorAlert: '', channelId: '' });
   const [saving, setSaving] = useState(false);
@@ -14,18 +23,24 @@ const CollectionsPage = ({ collections, setCollections, guildId }: { collections
     if (!form.name.trim()) { setError('Collection name is required'); return; }
     setSaving(true); setError('');
     try {
-      await addCollection(guildId, form.contract, form.name, form.floorAlert ? parseFloat(form.floorAlert) : undefined, form.channelId || undefined);
-      setCollections((prev: any) => [...prev, { name: form.name, contractAddress: form.contract, chain: 'ETH' }]);
+      const data = await addCollection(guildId, form.contract, form.name, form.floorAlert ? parseFloat(form.floorAlert) : undefined, form.channelId || undefined);
+      const row = data.collection as Collection | undefined;
+      if (row?.contractAddress) {
+        setCollections(prev => [...prev, { ...row, chain: row.chain || 'ETH' }]);
+      } else {
+        setCollections(prev => [...prev, { name: form.name, contractAddress: form.contract.toLowerCase(), chain: 'ETH' }]);
+      }
       setForm({ contract: '', name: '', floorAlert: '', channelId: '' }); setShowModal(false);
     } catch { setError('API error'); }
     setSaving(false);
   };
 
-  const handleDelete = async (c: any) => {
+  const handleDelete = async (c: Collection) => {
     if (!confirm(`Untrack ${c.name}?`)) return;
     try {
+      if (!c.id) throw new Error('Missing collection id');
       await deleteCollection(guildId, c.id);
-      setCollections((prev: any) => prev.filter((x: any) => x.contractAddress !== c.contractAddress));
+      setCollections(prev => prev.filter(x => x.contractAddress !== c.contractAddress));
     } catch { alert('Delete failed'); }
   };
 
@@ -51,9 +66,8 @@ const CollectionsPage = ({ collections, setCollections, guildId }: { collections
       )}
       <div className="stats-grid" style={{ marginBottom: 32 }}>
         <StatCard label="TRACKED" value={`${collections.length}`} color="var(--accent-cyan)" icon={Layers} />
-        <StatCard label="ALERTS" value="0" color="var(--accent-purple)" icon={BellRing} />
-        <StatCard label="STATUS" value="LIVE" color="var(--accent-emerald)" icon={Zap} />
-        <StatCard label="ACCURACY" value="99%" color="#f59e0b" icon={Shield} />
+        <StatCard label="RULES" value="—" color="var(--accent-purple)" icon={BellRing} />
+        <StatCard label="STATUS" value="CONFIGURED" color="var(--accent-emerald)" icon={Zap} />
       </div>
       <div className="glass-panel" style={{ padding: 24 }}>
         <SectionHeader title="Tracked Collections" action={

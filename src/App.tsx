@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Wallet, Layers, Settings, BellRing, Activity } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import './index.css';
 
 // Import modular pages
@@ -8,11 +9,32 @@ import WalletsPage from './components/WalletsPage';
 import CollectionsPage from './components/CollectionsPage';
 import AlertsPage from './components/AlertsPage';
 import SettingsPage from './components/SettingsPage';
+import type {
+  AuthMeResponse,
+  Collection,
+  CollectionsResponse,
+  GuildStatusResponse,
+  Rule,
+  RulesResponse,
+  Wallet as WatchedWallet,
+  WalletsResponse,
+} from './types';
+import { API_BASE, fetchGuildStatus } from './api';
 
 
 
 // Sidebar Item Component
-const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label: string, active?: boolean, onClick: () => void }) => (
+const SidebarItem = ({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}) => (
   <div onClick={onClick} className={`sidebar-item${active ? ' active' : ''}`}>
     <Icon size={18} />
     <span>{label}</span>
@@ -21,65 +43,76 @@ const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label:
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [rules, setRules] = useState<any[]>([]);
-  const [wallets, setWallets] = useState<any[]>([]);
-  const [collections, setCollections] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [wallets, setWallets] = useState<WatchedWallet[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [guildId, setGuildId] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('superbot_token'));
-
-  useEffect(() => {
+  const [guildStatus, setGuildStatus] = useState<GuildStatusResponse | null>(null);
+  const [token, setToken] = useState<string | null>(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tokenFromUrl = urlParams.get('token');
-    
+
     if (tokenFromUrl) {
       localStorage.setItem('superbot_token', tokenFromUrl);
-      setToken(tokenFromUrl);
       window.history.replaceState({}, document.title, window.location.pathname);
+      return tokenFromUrl;
     }
 
-    const currentToken = tokenFromUrl || localStorage.getItem('superbot_token');
-    
-    if (currentToken) {
-      const loadData = async () => {
-        setIsLoading(true);
-        try {
-          const headers = { Authorization: `Bearer ${currentToken}` };
-          
-          // Always refresh session info to get latest guildId
-          const meRes = await fetch(`https://superbot-backend-production.up.railway.app/api/v1/auth/me`, { headers });
-          if (meRes.status === 401) {
-            localStorage.removeItem('superbot_token');
-            setToken(null);
-            setIsLoading(false);
-            return;
-          }
+    return localStorage.getItem('superbot_token');
+  });
+  const [isLoading, setIsLoading] = useState(() => !!token);
 
-          const meData = await meRes.json();
-          if (meData.guildId) {
-            setGuildId(meData.guildId);
-            
-            const [rRes, wRes, cRes] = await Promise.all([
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${meData.guildId}/rules`, { headers }),
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${meData.guildId}/wallets`, { headers }),
-              fetch(`https://superbot-backend-production.up.railway.app/api/v1/guilds/${meData.guildId}/collections`, { headers })
-            ]);
-            
-            const [rData, wData, cData] = await Promise.all([rRes.json(), wRes.json(), cRes.json()]);
-            setRules(rData.rules || []);
-            setWallets(wData.wallets || []);
-            setCollections(cData.collections || []);
-          }
-        } catch (e) {
-          console.error('Data load failed', e);
+  useEffect(() => {
+    if (!token) return;
+
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // Always refresh session info to get latest guildId
+        const meRes = await fetch(`${API_BASE}/api/v1/auth/me`, { headers });
+        if (meRes.status === 401) {
+          localStorage.removeItem('superbot_token');
+          setToken(null);
+          setIsLoading(false);
+          return;
         }
-        setIsLoading(false);
-      };
-      loadData();
-    } else {
+
+        const meData = (await meRes.json()) as AuthMeResponse;
+        if (meData.guildId) {
+          setGuildId(meData.guildId);
+
+          const [rRes, wRes, cRes] = await Promise.all([
+            fetch(`${API_BASE}/api/v1/guilds/${meData.guildId}/rules`, { headers }),
+            fetch(`${API_BASE}/api/v1/guilds/${meData.guildId}/wallets`, { headers }),
+            fetch(`${API_BASE}/api/v1/guilds/${meData.guildId}/collections`, { headers }),
+          ]);
+
+          const [rData, wData, cData] = (await Promise.all([
+            rRes.json(),
+            wRes.json(),
+            cRes.json(),
+          ])) as [RulesResponse, WalletsResponse, CollectionsResponse];
+          setRules(rData.rules || []);
+          setWallets(wData.wallets || []);
+          setCollections(cData.collections || []);
+
+          try {
+            const status = (await fetchGuildStatus(meData.guildId)) as GuildStatusResponse;
+            setGuildStatus(status);
+          } catch {
+            setGuildStatus(null);
+          }
+        }
+      } catch (e) {
+        console.error('Data load failed', e);
+      }
       setIsLoading(false);
-    }
+    };
+
+    void loadData();
   }, [token]);
 
   const isAuth = !!token;
@@ -134,7 +167,7 @@ function App() {
             {isAuth ? (
               <span style={{ color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>✓ Authenticated</span>
             ) : (
-              <button className="cyber-btn primary" onClick={() => (window.location.href = 'https://superbot-backend-production.up.railway.app/api/v1/auth/discord')}>
+              <button className="cyber-btn primary" onClick={() => (window.location.href = `${API_BASE}/api/v1/auth/discord`)}>
                 Login
               </button>
             )}
@@ -145,7 +178,7 @@ function App() {
           <div style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>Loading live data...</div>
         ) : (
           <>
-            {activeTab === 'overview' && <OverviewPage rules={rules} wallets={wallets} collections={collections} />}
+            {activeTab === 'overview' && <OverviewPage rules={rules} wallets={wallets} collections={collections} guildStatus={guildStatus} />}
             {activeTab === 'wallets' && GUILD_ID && <WalletsPage wallets={wallets} setWallets={setWallets} guildId={GUILD_ID} />}
             {activeTab === 'collections' && GUILD_ID && <CollectionsPage collections={collections} setCollections={setCollections} guildId={GUILD_ID} />}
             {activeTab === 'alerts' && <AlertsPage rules={rules} />}

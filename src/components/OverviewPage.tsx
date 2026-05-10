@@ -1,49 +1,57 @@
 import { Zap, Wallet, Layers, Shield } from 'lucide-react';
 import { StatCard, SectionHeader, Badge } from './Shared';
+import type { Collection, GuildStatusResponse, Rule, Wallet as WatchedWallet } from '../types';
 
-const OverviewPage = ({ rules, wallets, collections }: { rules: any[], wallets: any[], collections: any[] }) => (
+const OverviewPage = ({
+  rules,
+  wallets,
+  collections,
+  guildStatus,
+}: {
+  rules: Rule[];
+  wallets: WatchedWallet[];
+  collections: Collection[];
+  guildStatus?: GuildStatusResponse | null;
+}) => (
   <div className="fade-in">
     <div className="stats-grid" style={{ marginBottom: 32 }}>
       <StatCard label="ACTIVE RULES" value={`${rules.length}`} color="var(--accent-cyan)" icon={Zap} />
       <StatCard label="WALLETS" value={`${wallets.length}`} color="var(--accent-purple)" icon={Wallet} />
       <StatCard label="COLLECTIONS" value={`${collections.length}`} color="var(--accent-emerald)" icon={Layers} />
-      <StatCard label="STATUS" value="LIVE" color="#f59e0b" icon={Shield} />
+      <StatCard label="PLAN" value={(guildStatus?.plan || 'Unknown').toString().toUpperCase()} color="#f59e0b" icon={Shield} />
     </div>
 
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }} className="overview-grid">
       <div className="glass-panel" style={{ padding: 24 }}>
-        <SectionHeader title="System Pulse" />
+        <SectionHeader title="Guild Summary" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {[
-            { msg: 'Blockchain Indexer: Ethereum', ok: true },
-            { msg: 'Credit Saving Mode: Active', ok: true },
-            { msg: 'Database Sync: Postgres', ok: true },
+            { msg: `Alert channels configured: ${guildStatus?.channels ?? '—'}`, ok: typeof guildStatus?.channels === 'number' },
+            { msg: `Tracked wallets: ${guildStatus?.wallets ?? '—'}`, ok: typeof guildStatus?.wallets === 'number' },
+            { msg: `Tracked collections: ${guildStatus?.collections ?? '—'}`, ok: typeof guildStatus?.collections === 'number' },
           ].map((s, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border-glass)' }}>
               <div style={{ fontSize: '0.875rem' }}>{s.msg}</div>
-              <Badge text={s.ok ? 'ONLINE' : 'OFFLINE'} color={s.ok ? 'var(--accent-emerald)' : 'var(--accent-rose)'} />
+              <Badge text={s.ok ? 'OK' : '—'} color={s.ok ? 'var(--accent-emerald)' : 'var(--text-tertiary)'} />
             </div>
           ))}
         </div>
       </div>
 
       <div className="glass-panel" style={{ padding: 24 }}>
-        <SectionHeader title="Chain Load" />
-        {[
-          { chain: 'Ethereum', events: 'Live', pct: 100 },
-          { chain: 'Polygon', events: 'Paused', pct: 0 },
-          { chain: 'Base', events: 'Paused', pct: 0 },
-        ].map(c => (
-          <div key={c.chain} style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: '0.875rem' }}>{c.chain}</span>
-              <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{c.events}</span>
+        <SectionHeader title="Data Sources" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[
+            { msg: 'Discord OAuth session', ok: true },
+            { msg: 'Postgres guild config (tracked wallets/collections)', ok: true },
+            { msg: 'Live chain indexing & whale alerts (indexer + worker on Railway)', ok: true },
+          ].map((s, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border-glass)' }}>
+              <div style={{ fontSize: '0.875rem' }}>{s.msg}</div>
+              <Badge text={s.ok ? 'LIVE' : 'TODO'} color={s.ok ? 'var(--accent-emerald)' : 'var(--accent-rose)'} />
             </div>
-            <div style={{ background: 'var(--bg-charcoal)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
-              <div style={{ width: `${c.pct}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent-cyan), var(--accent-purple))', borderRadius: 4, transition: 'width 0.8s ease' }} />
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
 

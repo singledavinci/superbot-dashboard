@@ -1,5 +1,17 @@
 // API client for SuperBot dashboard
-const API_BASE = import.meta.env.VITE_API_URL || 'https://superbot-backend-production.up.railway.app';
+export const API_BASE = import.meta.env.VITE_API_URL || 'https://superbot-backend-production.up.railway.app';
+
+export type ApiHttpError = Error & { status: number };
+
+export function createApiHttpError(message: string, status: number): ApiHttpError {
+    const err = new Error(message) as ApiHttpError;
+    err.status = status;
+    return err;
+}
+
+export function isApiHttpError(e: unknown): e is ApiHttpError {
+    return e instanceof Error && typeof (e as { status?: unknown }).status === 'number';
+}
 
 function authHeaders(): Record<string, string> {
     const token = localStorage.getItem('superbot_token');
@@ -8,9 +20,13 @@ function authHeaders(): Record<string, string> {
     return base;
 }
 
+function throwIfNotOk(res: Response, label: string): void {
+    if (!res.ok) throw createApiHttpError(label, res.status);
+}
+
 export async function fetchRules(guildId: string) {
     const res = await fetch(`${API_BASE}/api/v1/guilds/${guildId}/rules`, { headers: authHeaders() });
-    if (!res.ok) throw new Error('Failed to fetch rules');
+    throwIfNotOk(res, 'Failed to fetch rules');
     return res.json();
 }
 
@@ -20,8 +36,8 @@ export async function addWallet(guildId: string, address: string, label: string,
         headers: authHeaders(),
         body: JSON.stringify({ address, label, alertChannelId }),
     });
-    if (!res.ok) throw new Error('Failed to add wallet');
-    return res.json();
+    throwIfNotOk(res, 'Failed to add wallet');
+    return res.json() as Promise<{ success?: boolean; wallet?: Record<string, unknown> }>;
 }
 
 export async function deleteWallet(guildId: string, walletId: string) {
@@ -29,7 +45,7 @@ export async function deleteWallet(guildId: string, walletId: string) {
         method: 'DELETE',
         headers: authHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to delete wallet');
+    throwIfNotOk(res, 'Failed to delete wallet');
     return res.json();
 }
 
@@ -39,8 +55,8 @@ export async function addCollection(guildId: string, contract: string, name: str
         headers: authHeaders(),
         body: JSON.stringify({ contract, name, floorAlertPct, alertChannelId }),
     });
-    if (!res.ok) throw new Error('Failed to add collection');
-    return res.json();
+    throwIfNotOk(res, 'Failed to add collection');
+    return res.json() as Promise<{ success?: boolean; collection?: Record<string, unknown> }>;
 }
 
 export async function deleteCollection(guildId: string, collectionId: string) {
@@ -48,23 +64,29 @@ export async function deleteCollection(guildId: string, collectionId: string) {
         method: 'DELETE',
         headers: authHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to delete collection');
+    throwIfNotOk(res, 'Failed to delete collection');
     return res.json();
 }
 
 export async function fetchWallets(guildId: string) {
     const res = await fetch(`${API_BASE}/api/v1/guilds/${guildId}/wallets`, { headers: authHeaders() });
-    if (!res.ok) throw new Error('Failed to fetch wallets');
+    throwIfNotOk(res, 'Failed to fetch wallets');
     return res.json();
 }
 
 export async function fetchCollections(guildId: string) {
     const res = await fetch(`${API_BASE}/api/v1/guilds/${guildId}/collections`, { headers: authHeaders() });
-    if (!res.ok) throw new Error('Failed to fetch collections');
+    throwIfNotOk(res, 'Failed to fetch collections');
     return res.json();
 }
 
 export async function fetchStatus() {
     const res = await fetch(`${API_BASE}/api/health`);
+    return res.json();
+}
+
+export async function fetchGuildStatus(guildId: string) {
+    const res = await fetch(`${API_BASE}/api/v1/guilds/${guildId}/status`, { headers: authHeaders() });
+    throwIfNotOk(res, 'Failed to fetch guild status');
     return res.json();
 }

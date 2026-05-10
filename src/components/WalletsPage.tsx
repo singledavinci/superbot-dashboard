@@ -1,14 +1,24 @@
 import { useState } from 'react';
-import { Wallet, Activity, Shield, Zap, Plus, X, Trash2 } from 'lucide-react';
+import { Wallet, Activity, Zap, Plus, X, Trash2 } from 'lucide-react';
 import { StatCard, SectionHeader, Badge } from './Shared';
-import { addWallet } from '../api';
+import { addWallet, deleteWallet, isApiHttpError } from '../api';
+import type { Wallet as WatchedWallet } from '../types';
 
-const WalletsPage = ({ wallets, setWallets, guildId }: { wallets: any[], setWallets: any, guildId: string }) => {
+const WalletsPage = ({
+  wallets,
+  setWallets,
+  guildId,
+}: {
+  wallets: WatchedWallet[];
+  setWallets: React.Dispatch<React.SetStateAction<WatchedWallet[]>>;
+  guildId: string;
+}) => {
   const [filter, setFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ address: '', label: '', channelId: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filtered = wallets.filter(w => (w.label || '').toLowerCase().includes(filter.toLowerCase()) || w.address.toLowerCase().includes(filter));
 
@@ -16,17 +26,43 @@ const WalletsPage = ({ wallets, setWallets, guildId }: { wallets: any[], setWall
     if (!form.address.startsWith('0x') || form.address.length < 42) { setError('Enter a valid 0x address'); return; }
     setSaving(true); setError('');
     try {
-      await addWallet(guildId, form.address, form.label, form.channelId || undefined);
-      setWallets((prev: any) => [...prev, { address: form.address, label: form.label || form.address.slice(0, 8), chain: 'ETH' }]);
+      const data = await addWallet(guildId, form.address, form.label, form.channelId || undefined);
+      const row = data.wallet as WatchedWallet | undefined;
+      if (row?.address) {
+        setWallets(prev => [...prev, { ...row, chain: row.chain || 'ETH' }]);
+      } else {
+        setWallets(prev => [
+          ...prev,
+          { address: form.address.toLowerCase(), label: form.label || form.address.slice(0, 8), chain: 'ETH' },
+        ]);
+      }
       setForm({ address: '', label: '', channelId: '' }); setShowModal(false);
-    } catch (err: any) { 
-      if (err.response?.status === 401) {
+    } catch (err: unknown) {
+      if (isApiHttpError(err) && err.status === 401) {
         setError('Please login to manage wallets');
       } else {
         setError('API error - check login status');
       }
     }
     setSaving(false);
+  };
+
+  const handleDelete = async (w: WatchedWallet) => {
+    if (!confirm(`Remove ${w.label || w.address.slice(0, 8)} from tracking?`)) return;
+    if (!w.id) {
+      setError('Cannot delete: refresh the page and try again');
+      return;
+    }
+    setDeletingId(w.id);
+    setError('');
+    try {
+      await deleteWallet(guildId, w.id);
+      setWallets(prev => prev.filter(x => x.id !== w.id && x.address.toLowerCase() !== w.address.toLowerCase()));
+    } catch (err: unknown) {
+      if (isApiHttpError(err) && err.status === 401) setError('Please login again');
+      else setError('Delete failed — check login or try again');
+    }
+    setDeletingId(null);
   };
 
   return (
@@ -51,11 +87,13 @@ const WalletsPage = ({ wallets, setWallets, guildId }: { wallets: any[], setWall
       )}
       <div className="stats-grid" style={{ marginBottom: 32 }}>
         <StatCard label="TRACKED WALLETS" value={`${wallets.length}`} color="var(--accent-cyan)" icon={Wallet} />
-        <StatCard label="STATUS" value="LIVE" color="var(--accent-emerald)" icon={Zap} />
-        <StatCard label="CHAIN" value="ETH" color="var(--accent-purple)" icon={Activity} />
-        <StatCard label="ACCURACY" value="98%" color="#f59e0b" icon={Shield} />
+        <StatCard label="STATUS" value="CONFIGURED" color="var(--accent-emerald)" icon={Zap} />
+        <StatCard label="CHAIN" value="EVM" color="var(--accent-purple)" icon={Activity} />
       </div>
       <div className="glass-panel" style={{ padding: 24 }}>
+        {error && (
+          <p style={{ color: 'var(--accent-rose)', fontSize: '0.85rem', marginBottom: 16 }}>{error}</p>
+        )}
         <SectionHeader title="Tracked Wallets" action={
           <div style={{ display: 'flex', gap: 12 }}>
             <input placeholder="Filter..." value={filter} onChange={e => setFilter(e.target.value)} className="search-input" />
@@ -72,7 +110,17 @@ const WalletsPage = ({ wallets, setWallets, guildId }: { wallets: any[], setWall
                 <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{w.address.slice(0, 10)}...{w.address.slice(-6)}</td>
                 <td><Badge text={w.chain || 'ETH'} color="var(--accent-cyan)" /></td>
                 <td><Badge text="Tracking" color="var(--accent-emerald)" /></td>
-                <td><button className="icon-btn danger"><Trash2 size={14} /></button></td>
+                <td>
+                  <button
+                    type="button"
+                    className="icon-btn danger"
+                    disabled={deletingId === w.id}
+                    aria-label="Remove wallet"
+                    onClick={() => void handleDelete(w)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </td>
               </tr>
             )) : (
               <tr><td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>No wallets found.</td></tr>
