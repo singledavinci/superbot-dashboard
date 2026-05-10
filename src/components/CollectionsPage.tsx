@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Layers, BellRing, Zap, Plus, X, Trash2 } from 'lucide-react';
 import { StatCard, SectionHeader, Badge } from './Shared';
-import { addCollection, deleteCollection } from '../api';
+import { addCollection, deleteCollection, isApiHttpError } from '../api';
 import type { Collection } from '../types';
 
 const CollectionsPage = ({
@@ -31,7 +31,13 @@ const CollectionsPage = ({
         setCollections(prev => [...prev, { name: form.name, contractAddress: form.contract.toLowerCase(), chain: 'ETH' }]);
       }
       setForm({ contract: '', name: '', floorAlert: '', channelId: '' }); setShowModal(false);
-    } catch { setError('API error'); }
+    } catch (err: unknown) {
+      if (isApiHttpError(err)) {
+        setError(err.status === 401 ? `Please sign in again — ${err.message}` : err.message);
+      } else {
+        setError(err instanceof Error ? err.message : 'Request failed');
+      }
+    }
     setSaving(false);
   };
 
@@ -41,7 +47,13 @@ const CollectionsPage = ({
       if (!c.id) throw new Error('Missing collection id');
       await deleteCollection(guildId, c.id);
       setCollections(prev => prev.filter(x => x.contractAddress !== c.contractAddress));
-    } catch { alert('Delete failed'); }
+    } catch (err: unknown) {
+      if (isApiHttpError(err)) {
+        alert(err.message);
+      } else {
+        alert('Delete failed');
+      }
+    }
   };
 
   return (

@@ -38,10 +38,20 @@ const WalletsPage = ({
       }
       setForm({ address: '', label: '', channelId: '' }); setShowModal(false);
     } catch (err: unknown) {
-      if (isApiHttpError(err) && err.status === 401) {
-        setError('Please login to manage wallets');
+      if (isApiHttpError(err)) {
+        if (err.status === 401) {
+          setError(`Please sign in again — ${err.message}`);
+        } else if (err.status === 403) {
+          setError(err.message);
+        } else if (err.status === 404) {
+          setError(err.message || 'Discord server was not found in the database.');
+        } else if (err.status >= 400 && err.status < 500) {
+          setError(err.message);
+        } else {
+          setError(`Server error (${err.status}) — ${err.message}`);
+        }
       } else {
-        setError('API error - check login status');
+        setError(err instanceof Error ? err.message : 'Network error — check your connection');
       }
     }
     setSaving(false);
@@ -59,8 +69,11 @@ const WalletsPage = ({
       await deleteWallet(guildId, w.id);
       setWallets(prev => prev.filter(x => x.id !== w.id && x.address.toLowerCase() !== w.address.toLowerCase()));
     } catch (err: unknown) {
-      if (isApiHttpError(err) && err.status === 401) setError('Please login again');
-      else setError('Delete failed — check login or try again');
+      if (isApiHttpError(err)) {
+        setError(err.status === 401 ? `Please sign in again — ${err.message}` : err.message);
+      } else {
+        setError(err instanceof Error ? err.message : 'Delete failed — try again');
+      }
     }
     setDeletingId(null);
   };
