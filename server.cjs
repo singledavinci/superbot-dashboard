@@ -5,10 +5,19 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Serve static files from the built dist folder
-app.use(express.static(path.join(__dirname, 'dist')));
+app.use(
+  express.static(path.join(__dirname, 'dist'), {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }),
+);
 
 // SPA fallback — all routes serve index.html
 app.get('*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 

@@ -19,9 +19,17 @@ import type {
   Wallet as WatchedWallet,
   WalletsResponse,
 } from './types';
-import { API_BASE, disconnectDiscord, fetchGuildStatus, persistActiveGuildId, readStoredActiveGuildId } from './api';
-
-
+import {
+  API_BASE,
+  BUILD_SHA,
+  clearSessionAndRedirectToLogin,
+  disconnectDiscord,
+  fetchGuildStatus,
+  fetchJsonWithAuth,
+  persistActiveGuildId,
+  persistEligibleGuildIds,
+  readStoredActiveGuildId,
+} from './api';
 
 // Sidebar Item Component
 const SidebarItem = ({
@@ -71,60 +79,84 @@ function App() {
 
     return localStorage.getItem('superbot_token');
   });
-  const [isLoading, setIsLoading] = useState(() => !!token);
+
+  const [sessionChecked, setSessionChecked] = useState(() => !localStorage.getItem('superbot_token'));
+  const [noEligibleGuilds, setNoEligibleGuilds] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => !!localStorage.getItem('superbot_token'));
 
   // Resolve JWT session and Discord guild scope once per login
   useEffect(() => {
     if (!token) {
       setEligibleGuildIds([]);
       setActiveGuildId(null);
+      setSessionChecked(true);
+      setNoEligibleGuilds(false);
+      setIsLoading(false);
       return;
     }
 
     const loadSession = async () => {
+      setSessionChecked(false);
       setIsLoading(true);
+      setNoEligibleGuilds(false);
       try {
         const headers = { Authorization: `Bearer ${token}` };
         const meRes = await fetch(`${API_BASE}/api/v1/auth/me`, { headers });
+
         if (meRes.status === 401 || meRes.status === 403) {
-          localStorage.removeItem('superbot_token');
-          setToken(null);
-          setIsLoading(false);
+          clearSessionAndRedirectToLogin();
           return;
         }
+
         if (!meRes.ok) {
-          setAuthBanner('Could not restore your session — sign in again.');
           localStorage.removeItem('superbot_token');
           setToken(null);
+          setAuthBanner('Could not restore your session — sign in again.');
+          setSessionChecked(true);
           setIsLoading(false);
           return;
         }
 
         const meData = (await meRes.json()) as AuthMeResponse;
-        const eligible =
-          meData.eligibleGuildIds?.length ? meData.eligibleGuildIds : meData.guildId ? [meData.guildId] : [];
+
+        if (meData.requiresReauth) {
+          clearSessionAndRedirectToLogin();
+          return;
+        }
+
+        const eligible = Array.isArray(meData.eligibleGuildIds)
+          ? meData.eligibleGuildIds.filter((id) => typeof id === 'string' && id.trim().length > 0)
+          : [];
+
+        persistEligibleGuildIds(eligible);
         setEligibleGuildIds(eligible);
 
         if (!eligible.length) {
-          setAuthBanner('Your token has no Discord server scope — sign out and log in again.');
-          localStorage.removeItem('superbot_token');
-          setToken(null);
+          setNoEligibleGuilds(true);
+          setActiveGuildId(null);
+          setSessionChecked(true);
           setIsLoading(false);
           return;
         }
 
         const stored = readStoredActiveGuildId();
+        const preferred =
+          typeof meData.guildId === 'string' && meData.guildId.trim()
+            ? meData.guildId.trim()
+            : undefined;
         const pick =
           stored && eligible.includes(stored)
             ? stored
-            : meData.guildId && eligible.includes(meData.guildId)
-              ? meData.guildId
+            : preferred && eligible.includes(preferred)
+              ? preferred
               : eligible[0]!;
         setActiveGuildId(pick);
         persistActiveGuildId(pick);
+        setSessionChecked(true);
       } catch (e) {
         console.error('Session load failed', e);
         setAuthBanner('Session lookup failed — try signing in again.');
+        setSessionChecked(true);
         setIsLoading(false);
       }
     };
@@ -133,7 +165,7 @@ function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!token || !activeGuildId) {
+    if (!token || !activeGuildId || !sessionChecked || noEligibleGuilds) {
       if (!token) setIsLoading(false);
       return;
     }
@@ -141,32 +173,10 @@ function App() {
     const loadGuildData = async () => {
       setIsLoading(true);
       try {
-        const headers = { Authorization: `Bearer ${token}` };
-        const [rRes, wRes, cRes] = await Promise.all([
-          fetch(`${API_BASE}/api/v1/guilds/${activeGuildId}/rules`, { headers }),
-          fetch(`${API_BASE}/api/v1/guilds/${activeGuildId}/wallets`, { headers }),
-          fetch(`${API_BASE}/api/v1/guilds/${activeGuildId}/collections`, { headers }),
-        ]);
-
-        for (const res of [rRes, wRes, cRes]) {
-          if (res.status === 401 || res.status === 403) {
-            localStorage.removeItem('superbot_token');
-            setToken(null);
-            setEligibleGuildIds([]);
-            setActiveGuildId(null);
-            setAuthBanner('Session expired or server access changed — please log in again.');
-            return;
-          }
-          if (!res.ok) {
-            setAuthBanner('Could not load dashboard data — try reloading or signing in again.');
-            return;
-          }
-        }
-
         const [rData, wData, cData] = (await Promise.all([
-          rRes.json(),
-          wRes.json(),
-          cRes.json(),
+          fetchJsonWithAuth(`${API_BASE}/api/v1/guilds/${activeGuildId}/rules`),
+          fetchJsonWithAuth(`${API_BASE}/api/v1/guilds/${activeGuildId}/wallets`),
+          fetchJsonWithAuth(`${API_BASE}/api/v1/guilds/${activeGuildId}/collections`),
         ])) as [RulesResponse, WalletsResponse, CollectionsResponse];
 
         setRules(rData.rules || []);
@@ -187,7 +197,7 @@ function App() {
     };
 
     void loadGuildData();
-  }, [token, activeGuildId]);
+  }, [token, activeGuildId, sessionChecked, noEligibleGuilds]);
 
   const onGuildSwitch = (nextId: string) => {
     if (!eligibleGuildIds.includes(nextId)) return;
@@ -196,6 +206,8 @@ function App() {
   };
 
   const isAuth = !!token;
+  const showAuthedBadge =
+    isAuth && sessionChecked && !noEligibleGuilds;
   const GUILD_ID = activeGuildId;
 
   const PAGE_TITLE: Record<string, string> = {
@@ -207,6 +219,45 @@ function App() {
   };
 
   const closeSidebar = () => setSidebarOpen(false);
+
+  if (token && sessionChecked && noEligibleGuilds) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative' }}>
+        <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <div
+            style={{
+              maxWidth: 520,
+              padding: 28,
+              borderRadius: 12,
+              border: '1px solid var(--border-glass)',
+              background: 'rgba(0,0,0,0.25)',
+            }}
+          >
+            <h1 style={{ fontSize: '1.25rem', marginBottom: 12 }}>No linked SuperBot servers yet</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5, marginBottom: 16 }}>
+              Your bot isn&apos;t installed in any Discord server where you have Administrator or Manage Server — or the bot
+              hasn&apos;t finished syncing. Go to Discord, invite the bot, then run{' '}
+              <code style={{ color: 'var(--accent-cyan)' }}>/setup</code> in your server.
+            </p>
+            <button type="button" className="cyber-btn primary" onClick={() => void disconnectDiscord()}>
+              Sign out
+            </button>
+          </div>
+        </main>
+        <footer
+          style={{
+            padding: '12px 24px',
+            color: 'var(--text-tertiary)',
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-mono)',
+            borderTop: '1px solid var(--border-glass)',
+          }}
+        >
+          build: {BUILD_SHA}
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', position: 'relative' }}>
@@ -238,84 +289,98 @@ function App() {
         </div>
       </aside>
 
-      <main className="main-content" style={{ flex: 1, padding: '40px 48px', overflowY: 'auto' }}>
-        <div className="mobile-header-spacer" style={{ height: '60px', display: 'none' }} />
-        
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40, marginTop: 'calc(var(--mobile-margin, 0px))' }}>
-          <div>
-            <h1 style={{ fontSize: 'clamp(1.25rem, 5vw, 1.75rem)', marginBottom: 4 }}>{PAGE_TITLE[activeTab]}</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }} className="header-desc">Real-time NFT intelligence.</p>
-          </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }} className="header-actions">
-            {isAuth && eligibleGuildIds.length > 1 && activeGuildId ? (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-                Server ID
-                <select
-                  className="cyber-select"
-                  value={activeGuildId}
-                  onChange={(e) => onGuildSwitch(e.target.value)}
-                  style={{
-                    background: 'rgba(0,0,0,0.35)',
-                    border: '1px solid var(--border-glass)',
-                    color: 'var(--text-primary)',
-                    borderRadius: 6,
-                    padding: '6px 10px',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.8rem',
-                  }}
-                >
-                  {eligibleGuildIds.map((gid) => (
-                    <option key={gid} value={gid}>
-                      {gid}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            {!isAuth ? (
-              <button className="cyber-btn primary" onClick={() => (window.location.href = `${API_BASE}/api/v1/auth/discord`)}>
-                Login
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <main className="main-content" style={{ flex: 1, padding: '40px 48px', overflowY: 'auto' }}>
+          <div className="mobile-header-spacer" style={{ height: '60px', display: 'none' }} />
+
+          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40, marginTop: 'calc(var(--mobile-margin, 0px))' }}>
+            <div>
+              <h1 style={{ fontSize: 'clamp(1.25rem, 5vw, 1.75rem)', marginBottom: 4 }}>{PAGE_TITLE[activeTab]}</h1>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }} className="header-desc">Real-time NFT intelligence.</p>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }} className="header-actions">
+              {isAuth && eligibleGuildIds.length > 1 && activeGuildId ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                  Server ID
+                  <select
+                    className="cyber-select"
+                    value={activeGuildId}
+                    onChange={(e) => onGuildSwitch(e.target.value)}
+                    style={{
+                      background: 'rgba(0,0,0,0.35)',
+                      border: '1px solid var(--border-glass)',
+                      color: 'var(--text-primary)',
+                      borderRadius: 6,
+                      padding: '6px 10px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    {eligibleGuildIds.map((gid) => (
+                      <option key={gid} value={gid}>
+                        {gid}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {!isAuth ? (
+                <button className="cyber-btn primary" onClick={() => (window.location.href = `${API_BASE}/api/v1/auth/discord`)}>
+                  Login
+                </button>
+              ) : null}
+              {showAuthedBadge ? (
+                <span style={{ color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>✓ Authenticated</span>
+              ) : null}
+            </div>
+          </header>
+
+          {authBanner ? (
+            <div
+              role="status"
+              style={{
+                marginBottom: 24,
+                padding: '14px 18px',
+                borderRadius: 8,
+                border: '1px solid rgba(251,191,36,0.4)',
+                background: 'rgba(251,191,36,0.08)',
+                color: 'var(--text-primary)',
+                fontSize: '0.9rem',
+              }}
+            >
+              {authBanner}{' '}
+              <button type="button" className="cyber-btn" style={{ marginLeft: 12, padding: '4px 12px', fontSize: '0.8rem' }} onClick={() => setAuthBanner(null)}>
+                Dismiss
               </button>
-            ) : null}
-            {isAuth ? (
-              <span style={{ color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>✓ Authenticated</span>
-            ) : null}
-          </div>
-        </header>
+            </div>
+          ) : null}
 
-        {authBanner ? (
-          <div
-            role="status"
-            style={{
-              marginBottom: 24,
-              padding: '14px 18px',
-              borderRadius: 8,
-              border: '1px solid rgba(251,191,36,0.4)',
-              background: 'rgba(251,191,36,0.08)',
-              color: 'var(--text-primary)',
-              fontSize: '0.9rem',
-            }}
-          >
-            {authBanner}{' '}
-            <button type="button" className="cyber-btn" style={{ marginLeft: 12, padding: '4px 12px', fontSize: '0.8rem' }} onClick={() => setAuthBanner(null)}>
-              Dismiss
-            </button>
-          </div>
-        ) : null}
+          {isLoading ? (
+            <div style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>Loading live data...</div>
+          ) : (
+            <>
+              {activeTab === 'overview' && <OverviewPage rules={rules} wallets={wallets} collections={collections} guildStatus={guildStatus} />}
+              {activeTab === 'wallets' && GUILD_ID && <WalletsPage wallets={wallets} setWallets={setWallets} guildId={GUILD_ID} />}
+              {activeTab === 'collections' && GUILD_ID && <CollectionsPage collections={collections} setCollections={setCollections} guildId={GUILD_ID} />}
+              {activeTab === 'alerts' && <AlertsPage rules={rules} />}
+              {activeTab === 'settings' && <SettingsPage />}
+            </>
+          )}
+        </main>
 
-        {isLoading ? (
-          <div style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>Loading live data...</div>
-        ) : (
-          <>
-            {activeTab === 'overview' && <OverviewPage rules={rules} wallets={wallets} collections={collections} guildStatus={guildStatus} />}
-            {activeTab === 'wallets' && GUILD_ID && <WalletsPage wallets={wallets} setWallets={setWallets} guildId={GUILD_ID} />}
-            {activeTab === 'collections' && GUILD_ID && <CollectionsPage collections={collections} setCollections={setCollections} guildId={GUILD_ID} />}
-            {activeTab === 'alerts' && <AlertsPage rules={rules} />}
-            {activeTab === 'settings' && <SettingsPage />}
-          </>
-        )}
-      </main>
-      
+        <footer
+          style={{
+            padding: '12px 48px 20px',
+            color: 'var(--text-tertiary)',
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-mono)',
+            flexShrink: 0,
+          }}
+        >
+          build: {BUILD_SHA}
+        </footer>
+      </div>
+
       <style>{`
         @media (max-width: 1024px) {
           .mobile-header-spacer { display: block !important; }
