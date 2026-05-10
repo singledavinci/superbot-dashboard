@@ -1,23 +1,30 @@
 import { execSync } from 'node:child_process';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-function shortGitSha(): string {
-    const env = process.env.RAILWAY_GIT_COMMIT_SHA || process.env.VITE_GIT_SHA || '';
-    if (env.length >= 7) return env.slice(0, 7);
-    if (env.length > 0) return env;
+function viteGitSha(): string {
+    const env =
+        process.env.RAILWAY_GIT_COMMIT_SHA ||
+        process.env.RAILWAY_GIT_COMMIT ||
+        process.env.VITE_GIT_SHA ||
+        '';
+    const trimmed = env.trim();
+    if (/^[a-f0-9]{40}$/i.test(trimmed)) return trimmed.toLowerCase();
+    if (/^[a-f0-9]{7,}$/i.test(trimmed)) return trimmed.toLowerCase();
     try {
-        return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+        return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim().toLowerCase();
     } catch {
         return 'unknown';
     }
 }
 
-const VITE_GIT_SHA = shortGitSha();
+const VITE_GIT_SHA = viteGitSha();
 
 export default defineConfig({
     plugins: [
         react(),
+        tailwindcss(),
         {
             name: 'html-git-sha-meta',
             transformIndexHtml(html: string) {
