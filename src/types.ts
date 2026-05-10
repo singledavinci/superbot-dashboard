@@ -25,7 +25,11 @@ export interface Collection {
 }
 
 export interface AuthMeResponse {
+  id?: string | null;
+  username?: string | null;
   guildId?: string | null;
+  /** Discord snowflakes the JWT may manage (slash-free API scope). */
+  eligibleGuildIds?: string[];
 }
 
 export interface RulesResponse {

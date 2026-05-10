@@ -90,3 +90,26 @@ export async function fetchGuildStatus(guildId: string) {
     throwIfNotOk(res, 'Failed to fetch guild status');
     return res.json();
 }
+
+const ACTIVE_GUILD_KEY = 'superbot_active_guild';
+
+/** Remember selected Discord guild for multi-server operators. */
+export function persistActiveGuildId(guildDiscordId: string) {
+    localStorage.setItem(ACTIVE_GUILD_KEY, guildDiscordId);
+}
+
+export function readStoredActiveGuildId(): string | null {
+    return localStorage.getItem(ACTIVE_GUILD_KEY);
+}
+
+/** Clear JWT, drop cached guild choice, optionally notify backend, then reload the app shell. */
+export async function disconnectDiscord() {
+    try {
+        await fetch(`${API_BASE}/api/v1/auth/logout`, { method: 'POST', headers: { ...authHeaders() } });
+    } catch {
+        /* stateless logout is fine */
+    }
+    localStorage.removeItem('superbot_token');
+    localStorage.removeItem(ACTIVE_GUILD_KEY);
+    window.location.replace('/');
+}
