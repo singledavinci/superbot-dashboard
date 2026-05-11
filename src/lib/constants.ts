@@ -12,6 +12,7 @@ export const DASHBOARD_ALERT_TYPES = [
     'FLOOR_RISE',
     'FLOOR_DROP',
     'MINT_RADAR',
+    'OPPORTUNITY_SPIKE',
 ] as const;
 
 export type DashboardAlertType = (typeof DASHBOARD_ALERT_TYPES)[number];
