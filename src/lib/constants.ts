@@ -2,7 +2,7 @@
 export const DASHBOARD_ALERT_TYPES = [
     'WHALE_BUY',
     'WHALE_SALE',
-    'WHALE_MINT',
+    'WALLET_ACTION_BATCH',
     'SWEEP',
     'CLUSTER_BUY',
     'MASS_LISTING',
